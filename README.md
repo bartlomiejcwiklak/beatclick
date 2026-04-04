@@ -20,4 +20,4 @@ npm run dev
 
 ### gallery
 
-<img width="1710" height="892" alt="Screenshot 2026-04-04 at 16 46 07" src="https://github.com/user-attachments/assets/273b0a52-edac-4cf0-bdf4-d9c4c7290099" />
+<img width="1710" height="986" alt="Screenshot 2026-04-04 at 17 29 36" src="https://github.com/user-attachments/assets/844d3d22-5c43-40dc-9e28-4b6a44c805af" />
