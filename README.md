@@ -21,3 +21,8 @@ npm run dev
 ### gallery
 
 <img width="1710" height="985" alt="Screenshot 2026-04-04 at 17 50 20" src="https://github.com/user-attachments/assets/7450d966-5343-4179-9ef0-b50714d091a1" />
+
+
+### acknowledgements
+
+this project uses the font [stack sans notch](https://fonts.google.com/specimen/Stack+Sans+Notch) by koto
