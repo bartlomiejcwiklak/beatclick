@@ -16,7 +16,7 @@ const STORAGE_KEY = "beatclick-state-v2";
 const STEP_COUNTS = [8, 16, 32] as const;
 const VISIBLE_STEP_COUNT = 24;
 const STEP_CELL_WIDTH_REM = 2.5;
-const TRACK_LABEL_WIDTH_REM = 4.5;
+const TRACK_LABEL_WIDTH_REM = 9.5;
 type StepCount = (typeof STEP_COUNTS)[number];
 
 const createPattern = (stepCount: number): boolean[][] =>
@@ -43,17 +43,17 @@ type BgParticle = {
 
 function columnShadeBefore(step: number): string {
   if (step % 4 === 0) {
-    return "before:pointer-events-none before:absolute before:inset-0 before:z-0 before:bg-yellow-400/15";
+    return "before:pointer-events-none before:absolute before:inset-0 before:z-0 before:bg-yellow-400/20";
   }
   if (step % 4 === 2) {
-    return "before:pointer-events-none before:absolute before:inset-0 before:z-0 before:bg-yellow-400/8";
+    return "before:pointer-events-none before:absolute before:inset-0 before:z-0 before:bg-yellow-400/12";
   }
   return "";
 }
 
 function columnShadeStepCell(step: number): string {
-  if (step % 4 === 0) return "bg-yellow-400/10";
-  if (step % 4 === 2) return "bg-yellow-400/5";
+  if (step % 4 === 0) return "bg-yellow-400/18";
+  if (step % 4 === 2) return "bg-yellow-400/10";
   return "";
 }
 
@@ -658,15 +658,15 @@ export default function App() {
               style={{ width: gridViewportWidth }}
             >
               <div className="relative z-[1] flex min-w-0 gap-2 sm:gap-3">
-                <div className="w-11 shrink-0 sm:w-16" aria-hidden="true" />
+                <div className="w-32 shrink-0 sm:w-40" aria-hidden="true" />
                 <div
-                  className="grid min-w-0 flex-1 gap-px bg-yellow-950/40"
+                  className="grid min-w-0 flex-1 gap-px"
                   style={{ gridTemplateColumns: `repeat(${stepCount}, minmax(${STEP_CELL_WIDTH_REM}rem, ${STEP_CELL_WIDTH_REM}rem))` }}
                 >
                   {Array.from({ length: stepCount }, (_, step) => (
                     <div
                       key={step}
-                      className={`flex aspect-square h-10 min-h-0 w-10 items-center justify-center bg-black sm:h-12 sm:w-12 ${columnShadeStepCell(step)}`}
+                      className={`flex aspect-square min-h-0 items-center justify-center bg-black ${columnShadeStepCell(step)}`}
                     >
                       <span
                         className={`text-[9px] font-bold tabular-nums sm:text-[10px] ${playing && playhead === step ? "text-yellow-400" : "text-yellow-800"}`}
@@ -687,24 +687,24 @@ export default function App() {
                       key={track.id}
                       className="flex min-w-0 items-stretch gap-2 sm:gap-3"
                     >
-                      <div className="flex w-11 shrink-0 flex-col items-end justify-center gap-1 sm:w-16">
-                        <span
-                          className={`truncate text-[10px] font-bold uppercase leading-tight sm:text-xs ${isMuted ? 'text-yellow-800 line-through' : 'text-yellow-600'}`}
-                        >
-                          {track.label}
-                        </span>
+                      <div className="flex w-32 shrink-0 items-center gap-1 sm:w-40 sm:gap-2">
                         <button
                           type="button"
                           aria-pressed={isMuted}
                           aria-label={`${track.label} ${isMuted ? 'unmute' : 'mute'}`}
                           onClick={() => toggleMute(trackIndex)}
-                          className={`rounded border px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide transition sm:text-[10px] ${isMuted ? 'border-yellow-400 bg-yellow-400 text-black' : 'border-yellow-700 bg-black text-yellow-600 hover:border-yellow-500 hover:text-yellow-500'}`}
+                          className={`rounded border px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide transition sm:text-[9px] ${isMuted ? 'border-yellow-400 bg-yellow-400 text-black' : 'border-yellow-700 bg-black text-yellow-600 hover:border-yellow-500 hover:text-yellow-500'}`}
                         >
-                          {isMuted ? 'Muted' : 'Mute'}
+                          {isMuted ? 'M' : 'U'}
                         </button>
+                        <span
+                          className={`flex-1 truncate text-right text-[10px] font-bold uppercase leading-tight sm:text-xs ${isMuted ? 'text-yellow-800 line-through' : 'text-yellow-600'}`}
+                        >
+                          {track.label}
+                        </span>
                       </div>
                       <div
-                        className="grid min-w-0 flex-1 gap-px bg-yellow-950/40"
+                        className="grid min-w-0 flex-1 gap-px"
                         style={{ gridTemplateColumns: `repeat(${stepCount}, minmax(${STEP_CELL_WIDTH_REM}rem, ${STEP_CELL_WIDTH_REM}rem))` }}
                       >
                         {Array.from({ length: stepCount }, (_, step) => {
@@ -729,7 +729,6 @@ export default function App() {
                               }
                               className={[
                                 "relative isolate aspect-square min-h-0 w-full min-w-0 overflow-visible border-0 bg-black transition-colors duration-100",
-                                "h-10 w-10 sm:h-12 sm:w-12",
                                 on ? "" : columnShadeBefore(step),
                                 "focus-visible:z-[2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-[-2px]",
                                 on ? "pad-hit-active pad-on" : "",
