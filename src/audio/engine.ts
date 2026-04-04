@@ -33,6 +33,8 @@ export function startTransport(
   getBpm: () => number,
   getPattern: () => boolean[][],
   getBuffers: () => (AudioBuffer | null)[],
+  getStepCount: () => number,
+  getSwing: () => number,
   output: AudioNode = ctx.destination,
   onStep?: (step: number, scheduledTime: number) => void,
 ): Transport {
@@ -44,10 +46,13 @@ export function startTransport(
   const tick = () => {
     if (stopped) return
     const dur = stepDurationSec(getBpm())
+    const stepCount = Math.max(1, Math.floor(getStepCount()))
+    const swing = Math.min(100, Math.max(0, getSwing())) / 100
+    const swingOffset = dur * 0.4 * swing
     const buffers = getBuffers()
 
     while (nextNoteTime < ctx.currentTime + SCHEDULE_AHEAD) {
-      const step = stepIndex % 16
+      const step = stepIndex % stepCount
       const pattern = getPattern()
 
       onStep?.(step, nextNoteTime)
@@ -66,7 +71,8 @@ export function startTransport(
         src.start(nextNoteTime)
       })
 
-      nextNoteTime += dur
+      const isEvenStep = stepIndex % 2 === 0
+      nextNoteTime += isEvenStep ? dur - swingOffset : dur + swingOffset
       stepIndex += 1
     }
   }

@@ -12,8 +12,23 @@ import {
 } from "./audio/engine";
 import { PRESETS, TRACKS } from "./config/presets";
 
-const initialPattern = (): boolean[][] =>
-  TRACKS.map(() => Array.from({ length: 16 }, () => false));
+const STORAGE_KEY = "beatclick-state-v2";
+const STEP_COUNTS = [8, 16, 32] as const;
+const VISIBLE_STEP_COUNT = 24;
+const STEP_CELL_WIDTH_REM = 2.5;
+const TRACK_LABEL_WIDTH_REM = 4.5;
+type StepCount = (typeof STEP_COUNTS)[number];
+
+const createPattern = (stepCount: number): boolean[][] =>
+  TRACKS.map(() => Array.from({ length: stepCount }, () => false));
+
+const initialPattern = (): boolean[][] => createPattern(16);
+
+const resizePattern = (pattern: boolean[][], stepCount: number): boolean[][] =>
+  TRACKS.map((_, trackIndex) => {
+    const row = pattern[trackIndex] ?? [];
+    return Array.from({ length: stepCount }, (_, step) => row[step] ?? false);
+  });
 
 type BgParticle = {
   id: number;
@@ -81,6 +96,8 @@ export default function App() {
   const [pattern, setPattern] = useState(initialPattern);
   const [bpm, setBpm] = useState(120);
   const [masterVolume, setMasterVolume] = useState(80);
+  const [stepCount, setStepCount] = useState<StepCount>(16);
+  const [swing, setSwing] = useState(0);
   const [bpmDraft, setBpmDraft] = useState("120");
   const [presetId, setPresetId] = useState(PRESETS[0]!.id);
   const [playing, setPlaying] = useState(false);
@@ -97,6 +114,7 @@ export default function App() {
   const masterGainRef = useRef<GainNode | null>(null);
   const buffersRef = useRef<(AudioBuffer | null)[]>(TRACKS.map(() => null));
   const transportRef = useRef<ReturnType<typeof startTransport> | null>(null);
+  const hydratedRef = useRef(false);
   const dragPaintRef = useRef<{
     active: boolean;
     value: boolean;
@@ -108,12 +126,20 @@ export default function App() {
 
   const bpmRef = useRef(bpm);
   const masterVolumeRef = useRef(masterVolume);
+  const stepCountRef = useRef(stepCount);
+  const swingRef = useRef(swing);
   const patternRef = useRef(pattern);
   const mutedTracksRef = useRef(mutedTracks);
 
   useEffect(() => {
     bpmRef.current = bpm;
   }, [bpm]);
+  useEffect(() => {
+    stepCountRef.current = stepCount;
+  }, [stepCount]);
+  useEffect(() => {
+    swingRef.current = swing;
+  }, [swing]);
   useEffect(() => {
     masterVolumeRef.current = masterVolume;
     const ctx = ctxRef.current;
@@ -146,6 +172,66 @@ export default function App() {
   useEffect(() => {
     mutedTracksRef.current = mutedTracks;
   }, [mutedTracks]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as {
+          pattern?: boolean[][];
+          bpm?: number;
+          masterVolume?: number;
+          presetId?: string;
+          mutedTracks?: boolean[];
+          stepCount?: StepCount;
+          swing?: number;
+        };
+        const savedStepCount = STEP_COUNTS.includes(parsed.stepCount ?? 16)
+          ? (parsed.stepCount ?? 16)
+          : 16;
+        if (parsed.pattern) {
+          setPattern(resizePattern(parsed.pattern, savedStepCount));
+        }
+        if (typeof parsed.bpm === "number") setBpm(parsed.bpm);
+        if (typeof parsed.masterVolume === "number")
+          setMasterVolume(parsed.masterVolume);
+        if (typeof parsed.presetId === "string") setPresetId(parsed.presetId);
+        if (Array.isArray(parsed.mutedTracks)) {
+          setMutedTracks(
+            TRACKS.map((_, index) => parsed.mutedTracks?.[index] ?? false),
+          );
+        }
+        setStepCount(savedStepCount);
+        if (typeof parsed.swing === "number") {
+          setSwing(Math.min(100, Math.max(0, parsed.swing)));
+        }
+      }
+    } catch {
+      // Ignore malformed storage.
+    } finally {
+      hydratedRef.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          pattern,
+          bpm,
+          masterVolume,
+          presetId,
+          mutedTracks,
+          stepCount,
+          swing,
+        }),
+      );
+    } catch {
+      // Ignore storage failures.
+    }
+  }, [pattern, bpm, masterVolume, presetId, mutedTracks, stepCount, swing]);
 
   const ensureCtx = useCallback(async (resume = true) => {
     const Ctx =
@@ -181,6 +267,14 @@ export default function App() {
     }
   }, [ensureCtx, presetId]);
 
+  const setPatternLength = useCallback((nextCount: StepCount) => {
+    setStepCount(nextCount);
+    setPattern((current) => resizePattern(current, nextCount));
+  }, []);
+
+  const visibleStepCount = Math.min(stepCount, VISIBLE_STEP_COUNT);
+  const gridViewportWidth = `${TRACK_LABEL_WIDTH_REM + visibleStepCount * STEP_CELL_WIDTH_REM + Math.max(0, visibleStepCount - 1) * 0.0625 + 0.5}rem`;
+
   const toggleMute = useCallback((trackIndex: number) => {
     setMutedTracks((current) =>
       current.map((isMuted, index) =>
@@ -209,10 +303,11 @@ export default function App() {
 
   const resetSequence = useCallback(() => {
     stopPlayback();
-    setPattern(initialPattern());
+    setPattern(createPattern(stepCountRef.current));
   }, [stopPlayback]);
 
   useEffect(() => {
+    if (!hydratedRef.current) return;
     const t = window.setTimeout(() => {
       void loadKit();
     }, 0);
@@ -240,6 +335,8 @@ export default function App() {
         () => bpmRef.current,
         () => patternRef.current,
         getPlaybackBuffers,
+        () => stepCountRef.current,
+        () => swingRef.current,
         masterGainRef.current ?? ctx.destination,
         (step, scheduledTime) => {
           const delayMs = Math.max(
@@ -345,7 +442,7 @@ export default function App() {
       .filter((idx) => idx >= 0);
     if (activeRows.length === 0) return;
 
-    const colCenter = ((beatFlash.col + 0.5) / 16) * 100;
+    const colCenter = ((beatFlash.col + 0.5) / stepCountRef.current) * 100;
     const count = Math.min(18, activeRows.length * 3 + 2);
     const spawned: BgParticle[] = Array.from({ length: count }, () => {
       const row =
@@ -381,7 +478,14 @@ export default function App() {
   }, []);
 
   return (
-    <div className="relative isolate min-h-dvh overflow-x-hidden bg-black text-yellow-50">
+    <div
+      style={{
+        "--bpm": String(bpm),
+        "--bg-duration": `${Math.max(6, 180 / Math.max(40, bpm))}s`,
+      } as CSSProperties}
+      className="relative isolate min-h-dvh overflow-x-hidden bg-black text-yellow-50"
+    >
+      <div className="bg-bpm-field" aria-hidden="true" />
       <div
         className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
         aria-hidden="true"
@@ -460,6 +564,40 @@ export default function App() {
             </select>
           </label>
 
+          <div className="flex items-center gap-2 text-sm text-yellow-500">
+            <span className="font-semibold text-yellow-600">Length</span>
+            <div className="inline-flex overflow-hidden border-2 border-yellow-700 bg-black">
+              {[8, 16, 32].map((count) => (
+                <button
+                  key={count}
+                  type="button"
+                  aria-pressed={stepCount === count}
+                  onClick={() => setPatternLength(count as StepCount)}
+                  className={`px-3 py-2 text-sm font-bold ${stepCount === count ? 'bg-yellow-400 text-black' : 'text-yellow-600 hover:bg-neutral-950 hover:text-yellow-400'}`}
+                >
+                  {count}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-yellow-500">
+            <span className="font-semibold text-yellow-600">Swing</span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              aria-label="Swing amount"
+              value={swing}
+              onChange={(e) => setSwing(Number(e.target.value))}
+              className="h-2 w-28 cursor-pointer accent-yellow-400 sm:w-32"
+            />
+            <span className="w-8 text-right text-xs font-bold tabular-nums text-yellow-500">
+              {swing}
+            </span>
+          </label>
+
           <label className="flex items-center gap-2 text-sm text-yellow-500">
             <span className="font-semibold text-yellow-600">Master</span>
             <input
@@ -514,105 +652,119 @@ export default function App() {
           role="region"
           aria-label="Pattern grid"
         >
-          <div className="relative z-[1] flex min-w-0 gap-2 sm:gap-3">
-            <div className="w-11 shrink-0 sm:w-16" aria-hidden="true" />
-            <div className="grid min-w-0 flex-1 grid-cols-[repeat(16,minmax(0,1fr))] gap-px bg-yellow-950/40">
-              {Array.from({ length: 16 }, (_, step) => (
+          <div className="overflow-x-auto pb-1">
+            <div
+              className="mx-auto flex w-max flex-col gap-px"
+              style={{ width: gridViewportWidth }}
+            >
+              <div className="relative z-[1] flex min-w-0 gap-2 sm:gap-3">
+                <div className="w-11 shrink-0 sm:w-16" aria-hidden="true" />
                 <div
-                  key={step}
-                  className={`flex aspect-square max-h-5 min-h-0 items-center justify-center bg-black sm:max-h-6 ${columnShadeStepCell(step)}`}
+                  className="grid min-w-0 flex-1 gap-px bg-yellow-950/40"
+                  style={{ gridTemplateColumns: `repeat(${stepCount}, minmax(${STEP_CELL_WIDTH_REM}rem, ${STEP_CELL_WIDTH_REM}rem))` }}
                 >
-                  <span
-                    className={`text-[9px] font-bold tabular-nums sm:text-[10px] ${playing && playhead === step ? "text-yellow-400" : "text-yellow-800"}`}
-                  >
-                    {step + 1}
-                  </span>
+                  {Array.from({ length: stepCount }, (_, step) => (
+                    <div
+                      key={step}
+                      className={`flex aspect-square h-10 min-h-0 w-10 items-center justify-center bg-black sm:h-12 sm:w-12 ${columnShadeStepCell(step)}`}
+                    >
+                      <span
+                        className={`text-[9px] font-bold tabular-nums sm:text-[10px] ${playing && playhead === step ? "text-yellow-400" : "text-yellow-800"}`}
+                      >
+                        {step + 1}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
 
-          <div className="relative z-[1] mt-px flex flex-col gap-px">
-            {TRACKS.map((track, trackIndex) => {
-              const row = pattern[trackIndex] ?? [];
-              const isMuted = mutedTracks[trackIndex] ?? false;
-              return (
-                <div
-                  key={track.id}
-                  className="flex min-w-0 items-stretch gap-2 sm:gap-3"
-                >
-                  <div className="flex w-11 shrink-0 flex-col items-end justify-center gap-1 sm:w-16">
-                    <span
-                      className={`truncate text-[10px] font-bold uppercase leading-tight sm:text-xs ${isMuted ? 'text-yellow-800 line-through' : 'text-yellow-600'}`}
+              <div className="relative z-[1] flex flex-col gap-px">
+                {TRACKS.map((track, trackIndex) => {
+                  const row = pattern[trackIndex] ?? [];
+                  const isMuted = mutedTracks[trackIndex] ?? false;
+                  return (
+                    <div
+                      key={track.id}
+                      className="flex min-w-0 items-stretch gap-2 sm:gap-3"
                     >
-                      {track.label}
-                    </span>
-                    <button
-                      type="button"
-                      aria-pressed={isMuted}
-                      aria-label={`${track.label} ${isMuted ? 'unmute' : 'mute'}`}
-                      onClick={() => toggleMute(trackIndex)}
-                      className={`rounded border px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide transition sm:text-[10px] ${isMuted ? 'border-yellow-400 bg-yellow-400 text-black' : 'border-yellow-700 bg-black text-yellow-600 hover:border-yellow-500 hover:text-yellow-500'}`}
-                    >
-                      {isMuted ? 'Muted' : 'Mute'}
-                    </button>
-                  </div>
-                  <div className="grid min-w-0 flex-1 grid-cols-[repeat(16,minmax(0,1fr))] gap-px bg-yellow-950/40">
-                    {Array.from({ length: 16 }, (_, step) => {
-                      const on = row[step] ?? false;
-                      const isPlayhead = playing && playhead === step;
-                      const hitFlash =
-                        on && beatFlash.col === step ? beatFlash.gen : 0;
-                      return (
-                        <button
-                          key={step}
-                          type="button"
-                          aria-pressed={on}
-                          aria-label={`${track.label}, step ${step + 1}, ${on ? "on" : "off"}`}
-                          data-hit-flash={hitFlash}
-                          onPointerDown={(e) => {
-                            if (e.button !== 0) return;
-                            e.preventDefault();
-                            beginDragPaint(trackIndex, step, on);
-                          }}
-                          onPointerEnter={() =>
-                            continueDragPaint(trackIndex, step)
-                          }
-                          className={[
-                            "relative isolate aspect-square min-h-0 w-full min-w-0 overflow-visible border-0 bg-black transition-colors duration-100",
-                            on ? "" : columnShadeBefore(step),
-                            "focus-visible:z-[2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-[-2px]",
-                            on ? "pad-hit-active pad-on" : "",
-                            isMuted ? 'opacity-50' : '',
-                            on ? "bg-yellow-400" : "hover:bg-neutral-950",
-                            isPlayhead && !on
-                              ? "z-[1] outline outline-2 outline-yellow-400 outline-offset-[-2px]"
-                              : "",
-                            isPlayhead && on
-                              ? "z-[1] outline outline-2 outline-black outline-offset-[-2px]"
-                              : "",
-                          ]
-                            .filter(Boolean)
-                            .join(" ")}
+                      <div className="flex w-11 shrink-0 flex-col items-end justify-center gap-1 sm:w-16">
+                        <span
+                          className={`truncate text-[10px] font-bold uppercase leading-tight sm:text-xs ${isMuted ? 'text-yellow-800 line-through' : 'text-yellow-600'}`}
                         >
-                          {on && hitFlash !== 0 && (
-                            <span
-                              className="pointer-events-none absolute inset-0 z-[2] pad-hit-particles"
-                              aria-hidden="true"
-                            >
-                              <span className="pad-hit-particle pad-hit-particle-a" />
-                              <span className="pad-hit-particle pad-hit-particle-b" />
-                              <span className="pad-hit-particle pad-hit-particle-c" />
-                              <span className="pad-hit-particle pad-hit-particle-d" />
-                            </span>
-                          )}
+                          {track.label}
+                        </span>
+                        <button
+                          type="button"
+                          aria-pressed={isMuted}
+                          aria-label={`${track.label} ${isMuted ? 'unmute' : 'mute'}`}
+                          onClick={() => toggleMute(trackIndex)}
+                          className={`rounded border px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide transition sm:text-[10px] ${isMuted ? 'border-yellow-400 bg-yellow-400 text-black' : 'border-yellow-700 bg-black text-yellow-600 hover:border-yellow-500 hover:text-yellow-500'}`}
+                        >
+                          {isMuted ? 'Muted' : 'Mute'}
                         </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
+                      </div>
+                      <div
+                        className="grid min-w-0 flex-1 gap-px bg-yellow-950/40"
+                        style={{ gridTemplateColumns: `repeat(${stepCount}, minmax(${STEP_CELL_WIDTH_REM}rem, ${STEP_CELL_WIDTH_REM}rem))` }}
+                      >
+                        {Array.from({ length: stepCount }, (_, step) => {
+                          const on = row[step] ?? false;
+                          const isPlayhead = playing && playhead === step;
+                          const hitFlash =
+                            on && beatFlash.col === step ? beatFlash.gen : 0;
+                          return (
+                            <button
+                              key={step}
+                              type="button"
+                              aria-pressed={on}
+                              aria-label={`${track.label}, step ${step + 1}, ${on ? "on" : "off"}`}
+                              data-hit-flash={hitFlash}
+                              onPointerDown={(e) => {
+                                if (e.button !== 0) return;
+                                e.preventDefault();
+                                beginDragPaint(trackIndex, step, on);
+                              }}
+                              onPointerEnter={() =>
+                                continueDragPaint(trackIndex, step)
+                              }
+                              className={[
+                                "relative isolate aspect-square min-h-0 w-full min-w-0 overflow-visible border-0 bg-black transition-colors duration-100",
+                                "h-10 w-10 sm:h-12 sm:w-12",
+                                on ? "" : columnShadeBefore(step),
+                                "focus-visible:z-[2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-[-2px]",
+                                on ? "pad-hit-active pad-on" : "",
+                                isMuted ? 'opacity-50' : '',
+                                on ? "bg-yellow-400" : "hover:bg-neutral-950",
+                                isPlayhead && !on
+                                  ? "z-[1] outline outline-2 outline-yellow-400 outline-offset-[-2px]"
+                                  : "",
+                                isPlayhead && on
+                                  ? "z-[1] outline outline-2 outline-black outline-offset-[-2px]"
+                                  : "",
+                              ]
+                                .filter(Boolean)
+                                .join(" ")}
+                            >
+                              {on && hitFlash !== 0 && (
+                                <span
+                                  className="pointer-events-none absolute inset-0 z-[2] pad-hit-particles"
+                                  aria-hidden="true"
+                                >
+                                  <span className="pad-hit-particle pad-hit-particle-a" />
+                                  <span className="pad-hit-particle pad-hit-particle-b" />
+                                  <span className="pad-hit-particle pad-hit-particle-c" />
+                                  <span className="pad-hit-particle pad-hit-particle-d" />
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
 
