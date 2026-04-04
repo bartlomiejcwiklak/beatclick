@@ -1,16 +1,61 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react'
 import { loadBuffers, playheadFromTime, startTransport } from './audio/engine'
 import { PRESETS, TRACKS } from './config/presets'
 
 const initialPattern = (): boolean[][] =>
   TRACKS.map(() => Array.from({ length: 16 }, () => false))
 
+/** Quarter starts vs eighths: flat yellow tint, no gradients. */
+function columnShadeBefore(step: number): string {
+  if (step % 4 === 0) {
+    return 'before:pointer-events-none before:absolute before:inset-0 before:z-0 before:bg-yellow-400/15'
+  }
+  if (step % 4 === 2) {
+    return 'before:pointer-events-none before:absolute before:inset-0 before:z-0 before:bg-yellow-400/8'
+  }
+  return ''
+}
+
+function columnShadeStepCell(step: number): string {
+  if (step % 4 === 0) return 'bg-yellow-400/10'
+  if (step % 4 === 2) return 'bg-yellow-400/5'
+  return ''
+}
+
+function HeaderLogo() {
+  const [failed, setFailed] = useState(false)
+  if (failed) {
+    return (
+      <h1 className="text-3xl font-bold tracking-tight text-yellow-400 sm:text-4xl">
+        Pulse Grid
+      </h1>
+    )
+  }
+  return (
+    <img
+      src="/logo.png"
+      alt=""
+      decoding="async"
+      onError={() => setFailed(true)}
+      className="mx-auto block h-auto w-auto max-h-24 max-w-[min(100%,22rem)] object-contain object-center sm:max-h-32"
+    />
+  )
+}
+
 export default function App() {
   const [pattern, setPattern] = useState(initialPattern)
   const [bpm, setBpm] = useState(120)
+  const [bpmDraft, setBpmDraft] = useState('120')
   const [presetId, setPresetId] = useState(PRESETS[0]!.id)
   const [playing, setPlaying] = useState(false)
   const [playhead, setPlayhead] = useState(0)
+  const [beatFlash, setBeatFlash] = useState({ gen: 0, col: 0 })
   const [loadError, setLoadError] = useState<string | null>(null)
   const [buffersReady, setBuffersReady] = useState(false)
 
@@ -22,6 +67,7 @@ export default function App() {
   const transportStartRef = useRef(0)
   const rafRef = useRef(0)
   const playingRef = useRef(false)
+  const lastStepRef = useRef(-1)
 
   const bpmRef = useRef(bpm)
   const patternRef = useRef(pattern)
@@ -30,6 +76,21 @@ export default function App() {
   useEffect(() => {
     bpmRef.current = bpm
   }, [bpm])
+  useEffect(() => {
+    setBpmDraft(String(bpm))
+  }, [bpm])
+
+  const commitBpm = useCallback(() => {
+    const stripped = bpmDraft.replace(/\D/g, '')
+    if (stripped === '') {
+      setBpmDraft(String(bpm))
+      return
+    }
+    const n = Number.parseInt(stripped, 10)
+    const clamped = Math.min(220, Math.max(40, n))
+    setBpm(clamped)
+    setBpmDraft(String(clamped))
+  }, [bpmDraft, bpm])
   useEffect(() => {
     patternRef.current = pattern
   }, [pattern])
@@ -79,10 +140,16 @@ export default function App() {
     rafRef.current = 0
     setPlaying(false)
     setPlayhead(0)
+    setBeatFlash({ gen: 0, col: 0 })
+    lastStepRef.current = -1
   }, [])
 
   useEffect(() => {
-    if (!playing) return
+    if (!playing) {
+      lastStepRef.current = -1
+      return
+    }
+    lastStepRef.current = -1
     const loop = () => {
       const ctx = ctxRef.current
       if (!ctx || !playingRef.current) return
@@ -91,6 +158,10 @@ export default function App() {
         transportStartRef.current,
         bpmRef.current,
       )
+      if (ph !== lastStepRef.current) {
+        lastStepRef.current = ph
+        setBeatFlash((prev) => ({ gen: prev.gen + 1, col: ph }))
+      }
       setPlayhead(ph)
       rafRef.current = requestAnimationFrame(loop)
     }
@@ -153,66 +224,56 @@ export default function App() {
     })
   }
 
+  const rootStyle = { '--bpm': String(bpm) } as CSSProperties
+
   return (
-    <div className="min-h-dvh bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900 text-slate-100">
-      <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-3 pb-10 pt-8 sm:px-5 sm:pt-12">
-        <header className="mb-8 text-center sm:mb-10">
-          <p className="mb-1 text-xs font-medium uppercase tracking-[0.22em] text-teal-400/90">
-            Step sequencer
+    <div
+      style={rootStyle}
+      className="relative isolate min-h-dvh overflow-x-hidden bg-black text-yellow-50"
+    >
+      <div className="relative z-[1] mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-3 pb-10 pt-8 sm:px-5 sm:pt-12">
+        <header className="mb-6 sm:mb-8">
+          <p className="sr-only">
+            Drum step sequencer. Press Space to play or stop.
           </p>
-          <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            Pulse Grid
-          </h1>
-          <p className="mt-2 text-sm text-slate-400">
-            Each row is an instrument; sixteen steps across. Press{' '}
-            <kbd className="rounded border border-slate-600 bg-slate-800/80 px-1.5 py-0.5 font-mono text-xs text-slate-300">
-              Space
-            </kbd>{' '}
-            to play. WAV kits:{' '}
-            <code className="text-slate-300">public/samples/&lt;preset&gt;/</code>.
-          </p>
+          <HeaderLogo />
         </header>
 
         <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
-          <label className="flex items-center gap-2 text-sm text-slate-400">
-            <span className="sr-only">BPM</span>
-            <span aria-hidden className="w-8 text-right font-mono text-slate-500">
+          <label className="flex items-baseline gap-2 text-sm text-yellow-500">
+            <span className="font-semibold tracking-wide text-yellow-600">
               BPM
             </span>
             <input
-              type="range"
-              min={60}
-              max={180}
-              value={bpm}
-              onChange={(e) => setBpm(Number(e.target.value))}
-              className="h-1.5 w-36 cursor-pointer appearance-none rounded-full bg-slate-800 accent-teal-400 sm:w-44"
-            />
-            <input
-              type="number"
-              min={60}
-              max={180}
-              value={bpm}
-              onChange={(e) => {
-                const v = Number(e.target.value)
-                if (!Number.isFinite(v)) return
-                setBpm(Math.min(180, Math.max(60, Math.round(v))))
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              spellCheck={false}
+              aria-label="Beats per minute"
+              value={bpmDraft}
+              onChange={(e) => setBpmDraft(e.target.value)}
+              onBlur={() => commitBpm()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.currentTarget.blur()
+                }
               }}
-              className="w-14 rounded-md border border-slate-700 bg-slate-900/80 px-2 py-1 text-center font-mono text-sm text-white tabular-nums outline-none ring-teal-400/40 focus:ring-2"
+              className="w-[4.25rem] border-2 border-yellow-500 bg-black py-2 text-center text-lg font-bold tabular-nums tracking-tight text-yellow-400 outline-none focus-visible:ring-2 focus-visible:ring-yellow-400 focus-visible:ring-offset-2 focus-visible:ring-offset-black sm:w-[4.5rem] sm:text-xl"
             />
           </label>
 
-          <label className="flex items-center gap-2 text-sm text-slate-400">
-            Kit
+          <label className="flex items-center gap-2 text-sm text-yellow-500">
+            <span className="font-semibold text-yellow-600">Kit</span>
             <select
               value={presetId}
               onChange={(e) => {
                 stopPlayback()
                 setPresetId(e.target.value)
               }}
-              className="cursor-pointer rounded-lg border border-slate-700 bg-slate-900/90 px-3 py-2 text-sm text-slate-100 outline-none ring-teal-400/30 focus:ring-2"
+              className="cursor-pointer border-2 border-yellow-600 bg-black px-3 py-2 text-sm font-medium text-yellow-400 outline-none focus-visible:ring-2 focus-visible:ring-yellow-400 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
             >
               {PRESETS.map((p) => (
-                <option key={p.id} value={p.id}>
+                <option key={p.id} value={p.id} className="bg-black text-yellow-400">
                   {p.name}
                 </option>
               ))}
@@ -222,10 +283,10 @@ export default function App() {
           <button
             type="button"
             onClick={() => void togglePlay()}
-            className={`inline-flex min-w-[7rem] items-center justify-center rounded-xl px-5 py-2.5 text-sm font-semibold tracking-wide transition ${
+            className={`inline-flex min-w-[7rem] items-center justify-center border-2 px-5 py-2.5 text-sm font-bold tracking-wide uppercase ${
               playing
-                ? 'bg-rose-500/90 text-white shadow-lg shadow-rose-500/20 hover:bg-rose-400'
-                : 'bg-teal-500 text-slate-950 shadow-lg shadow-teal-500/25 hover:bg-teal-400'
+                ? 'border-yellow-400 bg-black text-yellow-400 hover:bg-neutral-950'
+                : 'border-yellow-400 bg-yellow-400 text-black hover:bg-yellow-300'
             }`}
           >
             {playing ? 'Stop' : 'Play'}
@@ -233,31 +294,32 @@ export default function App() {
         </div>
 
         {!buffersReady && !loadError && (
-          <p className="mt-4 text-center text-xs text-slate-500">Loading samples…</p>
+          <p className="mt-4 text-center text-xs text-yellow-700">
+            Loading samples…
+          </p>
         )}
         {loadError && (
-          <p className="mt-4 text-center text-sm text-rose-400" role="alert">
+          <p className="mt-4 text-center text-sm text-yellow-200" role="alert">
             {loadError}
           </p>
         )}
 
         <div
-          className="mx-auto mt-6 w-full max-w-full flex-1 sm:mt-8"
+          className="relative mx-auto mt-6 w-full max-w-full flex-1 sm:mt-8"
           role="region"
           aria-label="Pattern grid"
         >
-          <div className="flex min-w-0 gap-1.5 sm:gap-2">
-            <div
-              className="w-11 shrink-0 sm:w-16"
-              aria-hidden="true"
-            />
-            <div className="grid min-w-0 flex-1 grid-cols-[repeat(16,minmax(0,1fr))] gap-0.5 sm:gap-1">
+          <div className="relative z-[1] flex min-w-0 gap-2 sm:gap-3">
+            <div className="w-11 shrink-0 sm:w-16" aria-hidden="true" />
+            <div className="grid min-w-0 flex-1 grid-cols-[repeat(16,minmax(0,1fr))] gap-px bg-yellow-950/40">
               {Array.from({ length: 16 }, (_, step) => (
                 <div
                   key={step}
-                  className="flex aspect-square max-h-5 min-h-0 items-center justify-center sm:max-h-6"
+                  className={`flex aspect-square max-h-5 min-h-0 items-center justify-center bg-black sm:max-h-6 ${columnShadeStepCell(step)}`}
                 >
-                  <span className="text-[9px] font-mono tabular-nums text-slate-600 sm:text-[10px]">
+                  <span
+                    className={`text-[9px] font-bold tabular-nums sm:text-[10px] ${playing && playhead === step ? 'text-yellow-400' : 'text-yellow-800'}`}
+                  >
                     {step + 1}
                   </span>
                 </div>
@@ -265,50 +327,51 @@ export default function App() {
             </div>
           </div>
 
-          <div className="mt-1 flex flex-col gap-1.5 sm:gap-2">
+          <div className="relative z-[1] mt-px flex flex-col gap-px">
             {TRACKS.map((track, trackIndex) => {
               const row = pattern[trackIndex] ?? []
               return (
                 <div
                   key={track.id}
-                  className="flex min-w-0 items-stretch gap-1.5 sm:gap-2"
+                  className="flex min-w-0 items-stretch gap-2 sm:gap-3"
                 >
                   <div className="flex w-11 shrink-0 items-center justify-end sm:w-16">
-                    <span className="truncate text-[10px] font-medium leading-tight text-slate-400 sm:text-xs">
+                    <span className="truncate text-[10px] font-bold uppercase leading-tight text-yellow-600 sm:text-xs">
                       {track.label}
                     </span>
                   </div>
-                  <div className="grid min-w-0 flex-1 grid-cols-[repeat(16,minmax(0,1fr))] gap-0.5 sm:gap-1">
+                  <div className="grid min-w-0 flex-1 grid-cols-[repeat(16,minmax(0,1fr))] gap-px bg-yellow-950/40">
                     {Array.from({ length: 16 }, (_, step) => {
                       const on = row[step] ?? false
                       const isPlayhead = playing && playhead === step
+                      const hitFlash =
+                        on && beatFlash.col === step ? beatFlash.gen : 0
                       return (
                         <button
                           key={step}
                           type="button"
                           aria-pressed={on}
                           aria-label={`${track.label}, step ${step + 1}, ${on ? 'on' : 'off'}`}
+                          data-hit-flash={hitFlash}
                           onClick={() => toggleStep(trackIndex, step)}
                           className={[
-                            'relative aspect-square min-h-0 w-full min-w-0 rounded-md border transition-all duration-150 sm:rounded-lg',
-                            'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-teal-400',
+                            'relative isolate aspect-square min-h-0 w-full min-w-0 overflow-visible border-0 bg-black transition-colors duration-100',
+                            on ? '' : columnShadeBefore(step),
+                            'focus-visible:z-[2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-[-2px]',
+                            on ? 'pad-hit-active' : '',
                             on
-                              ? 'border-teal-400/45 bg-gradient-to-br from-teal-500/30 to-emerald-600/18 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]'
-                              : 'border-slate-700/80 bg-slate-900/55 hover:border-slate-600 hover:bg-slate-800/70',
-                            isPlayhead
-                              ? 'z-[1] ring-1 ring-amber-400/95 ring-offset-1 ring-offset-slate-950 sm:ring-2 sm:ring-offset-2'
+                              ? 'bg-yellow-400'
+                              : 'hover:bg-neutral-950',
+                            isPlayhead && !on
+                              ? 'z-[1] outline outline-2 outline-yellow-400 outline-offset-[-2px]'
+                              : '',
+                            isPlayhead && on
+                              ? 'z-[1] outline outline-2 outline-black outline-offset-[-2px]'
                               : '',
                           ]
                             .filter(Boolean)
                             .join(' ')}
-                        >
-                          {on && (
-                            <span
-                              className="pointer-events-none absolute inset-0.5 rounded-sm bg-teal-400/20 blur-[2px] sm:inset-1 sm:rounded-md"
-                              aria-hidden
-                            />
-                          )}
-                        </button>
+                        />
                       )
                     })}
                   </div>

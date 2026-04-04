@@ -1,15 +1,56 @@
 @import 'tailwindcss';
 
-html {
-  color-scheme: dark;
+@font-face {
+  font-family: 'Stack Sans Notch';
+  src: url('/fonts/StackSansNotch-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
 }
 
-body {
-  margin: 0;
-  min-height: 100dvh;
-  background: #030712;
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background: #000000;
+    font-family:
+      'Stack Sans Notch',
+      ui-sans-serif,
+      system-ui,
+      sans-serif;
+  }
+
+  #root {
+    min-height: 100dvh;
+  }
 }
 
-#root {
-  min-height: 100dvh;
+/* Glow only on enabled pads when they fire (data-hit-flash set + .pad-hit-active) */
+@keyframes pad-hit-glow {
+  0% {
+    filter: brightness(1.2) drop-shadow(0 0 12px rgba(250, 204, 21, 0.95));
+    box-shadow:
+      0 0 0 2px rgba(250, 204, 21, 0.9),
+      0 0 20px 4px rgba(250, 204, 21, 0.65),
+      0 0 40px 10px rgba(234, 179, 8, 0.35),
+      inset 0 0 12px rgba(254, 240, 138, 0.5);
+    transform: scale(1.05);
+  }
+  100% {
+    filter: brightness(1) drop-shadow(0 0 0 transparent);
+    box-shadow:
+      0 0 0 0 transparent,
+      0 0 0 0 transparent,
+      0 0 0 0 transparent,
+      inset 0 0 0 transparent;
+    transform: scale(1);
+  }
+}
+
+.pad-hit-active[data-hit-flash]:not([data-hit-flash='0']) {
+  animation: pad-hit-glow 0.26s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
