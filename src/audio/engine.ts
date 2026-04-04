@@ -33,6 +33,7 @@ export function startTransport(
   getBpm: () => number,
   getPattern: () => boolean[][],
   getBuffers: () => (AudioBuffer | null)[],
+  output: AudioNode = ctx.destination,
 ): Transport {
   let nextNoteTime = ctx.currentTime + 0.08
   const firstBeatTime = nextNoteTime
@@ -50,7 +51,7 @@ export function startTransport(
 
       const g = ctx.createGain()
       g.gain.value = 0.88
-      g.connect(ctx.destination)
+      g.connect(output)
 
       pattern.forEach((row, trackIdx) => {
         if (!row[step]) return
@@ -83,6 +84,7 @@ export function playOneShot(
   ctx: AudioContext,
   buffer: AudioBuffer | null,
   gain = 0.92,
+  output: AudioNode = ctx.destination,
 ): void {
   if (!buffer) return
   const src = ctx.createBufferSource()
@@ -90,7 +92,7 @@ export function playOneShot(
   const g = ctx.createGain()
   g.gain.value = gain
   src.connect(g)
-  g.connect(ctx.destination)
+  g.connect(output)
   const t = ctx.currentTime
   src.start(t)
 }

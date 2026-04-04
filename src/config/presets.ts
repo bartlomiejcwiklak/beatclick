@@ -9,6 +9,9 @@ export const TRACKS: TrackDef[] = [
   { id: 'snare', label: 'Snare', file: 'snare.wav' },
   { id: 'hihat', label: 'Hi-hat', file: 'hihat.wav' },
   { id: 'clap', label: 'Clap', file: 'clap.wav' },
+  { id: 'ride', label: 'Ride', file: 'ride.wav' },
+  { id: 'ohh', label: 'Open Hi Hat', file: 'openhh.wav' },
+  { id: 'vox', label: 'Vox', file: 'vox.wav' },
 ]
 
 export type PresetDef = {
@@ -17,6 +20,6 @@ export type PresetDef = {
 }
 
 export const PRESETS: PresetDef[] = [
-  { id: 'warehouse', name: 'Warehouse' },
-  { id: 'loft', name: 'Lo-Fi Loft' },
+  { id: 'trap', name: 'Trap' },
+  { id: 'house', name: 'House' },
 ]

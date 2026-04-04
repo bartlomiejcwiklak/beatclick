@@ -29,7 +29,34 @@
   }
 }
 
-/* Glow only on enabled pads when they fire (data-hit-flash set + .pad-hit-active) */
+@keyframes firework-dot-burst {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.4);
+  }
+  12% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(
+        calc(-50% + (var(--burst-x, 0.5) - 0.5) * 70px),
+        calc(-50% - (24px + var(--burst-y, 0.5) * 70px))
+      )
+      scale(0.95);
+  }
+}
+
+.bg-firework-dot {
+  position: absolute;
+  border-radius: 999px;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  animation: firework-dot-burst 1s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+  --burst-x: 0.5;
+  --burst-y: 0.5;
+}
+
 @keyframes pad-hit-glow {
   0% {
     filter: brightness(1.35) saturate(1.15) drop-shadow(0 0 18px rgba(250, 204, 21, 0.98));
