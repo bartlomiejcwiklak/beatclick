@@ -18,7 +18,4 @@ npm install
 npm run dev
 ```
 
-### Controls
-
-- Space: play/stop
-- 1, 2, 3, 4: preview the four loaded sample slots
+<img width="1710" height="892" alt="Screenshot 2026-04-04 at 16 46 07" src="https://github.com/user-attachments/assets/273b0a52-edac-4cf0-bdf4-d9c4c7290099" />
