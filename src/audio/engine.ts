@@ -79,6 +79,22 @@ export function startTransport(
   }
 }
 
+export function playOneShot(
+  ctx: AudioContext,
+  buffer: AudioBuffer | null,
+  gain = 0.92,
+): void {
+  if (!buffer) return
+  const src = ctx.createBufferSource()
+  src.buffer = buffer
+  const g = ctx.createGain()
+  g.gain.value = gain
+  src.connect(g)
+  g.connect(ctx.destination)
+  const t = ctx.currentTime
+  src.start(t)
+}
+
 export function playheadFromTime(
   ctx: AudioContext,
   transportStart: number,

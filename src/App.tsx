@@ -5,7 +5,12 @@ import {
   useState,
   type CSSProperties,
 } from 'react'
-import { loadBuffers, playheadFromTime, startTransport } from './audio/engine'
+import {
+  loadBuffers,
+  playheadFromTime,
+  playOneShot,
+  startTransport,
+} from './audio/engine'
 import { PRESETS, TRACKS } from './config/presets'
 
 const initialPattern = (): boolean[][] =>
@@ -26,6 +31,21 @@ function columnShadeStepCell(step: number): string {
   if (step % 4 === 0) return 'bg-yellow-400/10'
   if (step % 4 === 2) return 'bg-yellow-400/5'
   return ''
+}
+
+function previewSlotFromKey(e: KeyboardEvent): number | null {
+  if (e.code.startsWith('Digit')) {
+    const n = Number.parseInt(e.code.slice(5), 10)
+    if (n >= 1 && n <= 4) return n - 1
+  }
+  if (e.code.startsWith('Numpad')) {
+    const n = Number.parseInt(e.code.slice(6), 10)
+    if (n >= 1 && n <= 4) return n - 1
+  }
+  if (e.key >= '1' && e.key <= '4') {
+    return Number.parseInt(e.key, 10) - 1
+  }
+  return null
 }
 
 function HeaderLogo() {
@@ -68,6 +88,11 @@ export default function App() {
   const rafRef = useRef(0)
   const playingRef = useRef(false)
   const lastStepRef = useRef(-1)
+  const dragPaintRef = useRef<{
+    active: boolean
+    value: boolean
+    last: string | null
+  }>({ active: false, value: true, last: null })
 
   const bpmRef = useRef(bpm)
   const patternRef = useRef(pattern)
@@ -126,13 +151,6 @@ export default function App() {
     }
   }, [ensureCtx])
 
-  useEffect(() => {
-    const t = window.setTimeout(() => {
-      void loadKit()
-    }, 0)
-    return () => window.clearTimeout(t)
-  }, [presetId, loadKit])
-
   const stopPlayback = useCallback(() => {
     transportRef.current?.stop()
     transportRef.current = null
@@ -143,6 +161,13 @@ export default function App() {
     setBeatFlash({ gen: 0, col: 0 })
     lastStepRef.current = -1
   }, [])
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      void loadKit()
+    }, 0)
+    return () => window.clearTimeout(t)
+  }, [presetId, loadKit])
 
   useEffect(() => {
     if (!playing) {
@@ -204,25 +229,74 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== 'Space') return
+      if (e.repeat) return
       const t = e.target as HTMLElement
-      if (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.isContentEditable) return
-      e.preventDefault()
-      void togglePlay()
+      if (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.isContentEditable)
+        return
+
+      if (e.code === 'Space') {
+        e.preventDefault()
+        void togglePlay()
+        return
+      }
+
+      const previewSlot = previewSlotFromKey(e)
+      if (previewSlot !== null) {
+        e.preventDefault()
+        void ensureCtx().then((ctx) => {
+          playOneShot(ctx, buffersRef.current[previewSlot] ?? null)
+        })
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [togglePlay])
+  }, [togglePlay, ensureCtx])
 
-  const toggleStep = (trackIndex: number, step: number) => {
+  const setStepValue = (trackIndex: number, step: number, value: boolean) => {
     setPattern((p) => {
+      if (p[trackIndex]?.[step] === value) return p
       const next = p.map((row) => [...row])
       const row = next[trackIndex]
       if (!row) return p
-      row[step] = !row[step]
+      row[step] = value
       return next
     })
   }
+
+  const beginDragPaint = (
+    trackIndex: number,
+    step: number,
+    isOn: boolean,
+  ) => {
+    const value = !isOn
+    dragPaintRef.current = {
+      active: true,
+      value,
+      last: `${trackIndex}:${step}`,
+    }
+    setStepValue(trackIndex, step, value)
+  }
+
+  const continueDragPaint = (trackIndex: number, step: number) => {
+    if (!dragPaintRef.current.active) return
+    const key = `${trackIndex}:${step}`
+    if (dragPaintRef.current.last === key) return
+    dragPaintRef.current.last = key
+    setStepValue(trackIndex, step, dragPaintRef.current.value)
+  }
+
+  useEffect(() => {
+    const stopDrag = () => {
+      dragPaintRef.current.active = false
+      dragPaintRef.current.last = null
+    }
+    window.addEventListener('pointerup', stopDrag)
+    window.addEventListener('pointercancel', stopDrag)
+    return () => {
+      window.removeEventListener('pointerup', stopDrag)
+      window.removeEventListener('pointercancel', stopDrag)
+    }
+  }, [])
 
   const rootStyle = { '--bpm': String(bpm) } as CSSProperties
 
@@ -234,7 +308,8 @@ export default function App() {
       <div className="relative z-[1] mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-3 pb-10 pt-8 sm:px-5 sm:pt-12">
         <header className="mb-6 sm:mb-8">
           <p className="sr-only">
-            Drum step sequencer. Press Space to play or stop.
+            Drum step sequencer. Space to play or stop. Keys 1 through 4
+            preview the four sample slots when loaded.
           </p>
           <HeaderLogo />
         </header>
@@ -353,12 +428,17 @@ export default function App() {
                           aria-pressed={on}
                           aria-label={`${track.label}, step ${step + 1}, ${on ? 'on' : 'off'}`}
                           data-hit-flash={hitFlash}
-                          onClick={() => toggleStep(trackIndex, step)}
+                          onPointerDown={(e) => {
+                            if (e.button !== 0) return
+                            e.preventDefault()
+                            beginDragPaint(trackIndex, step, on)
+                          }}
+                          onPointerEnter={() => continueDragPaint(trackIndex, step)}
                           className={[
                             'relative isolate aspect-square min-h-0 w-full min-w-0 overflow-visible border-0 bg-black transition-colors duration-100',
                             on ? '' : columnShadeBefore(step),
                             'focus-visible:z-[2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400 focus-visible:outline-offset-[-2px]',
-                            on ? 'pad-hit-active' : '',
+                            on ? 'pad-hit-active pad-on' : '',
                             on
                               ? 'bg-yellow-400'
                               : 'hover:bg-neutral-950',
@@ -371,7 +451,16 @@ export default function App() {
                           ]
                             .filter(Boolean)
                             .join(' ')}
-                        />
+                        >
+                          {on && hitFlash !== 0 && (
+                            <span className="pointer-events-none absolute inset-0 z-[2] pad-hit-particles" aria-hidden="true">
+                              <span className="pad-hit-particle pad-hit-particle-a" />
+                              <span className="pad-hit-particle pad-hit-particle-b" />
+                              <span className="pad-hit-particle pad-hit-particle-c" />
+                              <span className="pad-hit-particle pad-hit-particle-d" />
+                            </span>
+                          )}
+                        </button>
                       )
                     })}
                   </div>

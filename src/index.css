@@ -32,13 +32,13 @@
 /* Glow only on enabled pads when they fire (data-hit-flash set + .pad-hit-active) */
 @keyframes pad-hit-glow {
   0% {
-    filter: brightness(1.2) drop-shadow(0 0 12px rgba(250, 204, 21, 0.95));
+    filter: brightness(1.35) saturate(1.15) drop-shadow(0 0 18px rgba(250, 204, 21, 0.98));
     box-shadow:
-      0 0 0 2px rgba(250, 204, 21, 0.9),
-      0 0 20px 4px rgba(250, 204, 21, 0.65),
-      0 0 40px 10px rgba(234, 179, 8, 0.35),
-      inset 0 0 12px rgba(254, 240, 138, 0.5);
-    transform: scale(1.05);
+      0 0 0 3px rgba(254, 240, 138, 0.95),
+      0 0 34px 7px rgba(250, 204, 21, 0.75),
+      0 0 54px 16px rgba(234, 179, 8, 0.45),
+      inset 0 0 18px rgba(255, 255, 200, 0.65);
+    transform: scale(1.08);
   }
   100% {
     filter: brightness(1) drop-shadow(0 0 0 transparent);
@@ -52,5 +52,52 @@
 }
 
 .pad-hit-active[data-hit-flash]:not([data-hit-flash='0']) {
-  animation: pad-hit-glow 0.26s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: pad-hit-glow 0.34s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.pad-on {
+  box-shadow: inset 0 0 10px rgba(255, 250, 170, 0.42);
+}
+
+@keyframes pad-particle-burst {
+  0% {
+    opacity: 0.95;
+    transform: translate(-50%, -50%) scale(0.7);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.2);
+  }
+}
+
+.pad-hit-particle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #fff9c8;
+  box-shadow: 0 0 10px rgba(250, 204, 21, 0.95);
+  animation: pad-particle-burst 0.32s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+}
+
+.pad-hit-particle-a {
+  --dx: 0px;
+  --dy: -22px;
+}
+
+.pad-hit-particle-b {
+  --dx: 18px;
+  --dy: -6px;
+}
+
+.pad-hit-particle-c {
+  --dx: -18px;
+  --dy: -8px;
+}
+
+.pad-hit-particle-d {
+  --dx: 0px;
+  --dy: 20px;
 }
