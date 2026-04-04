@@ -7,7 +7,6 @@ import {
 } from "react";
 import {
   loadBuffers,
-  playheadFromTime,
   playOneShot,
   startTransport,
 } from "./audio/engine";
@@ -98,10 +97,6 @@ export default function App() {
   const masterGainRef = useRef<GainNode | null>(null);
   const buffersRef = useRef<(AudioBuffer | null)[]>(TRACKS.map(() => null));
   const transportRef = useRef<ReturnType<typeof startTransport> | null>(null);
-  const transportStartRef = useRef(0);
-  const rafRef = useRef(0);
-  const playingRef = useRef(false);
-  const lastStepRef = useRef(-1);
   const dragPaintRef = useRef<{
     active: boolean;
     value: boolean;
@@ -109,6 +104,7 @@ export default function App() {
   }>({ active: false, value: true, last: null });
   const nextParticleIdRef = useRef(1);
   const particleTimersRef = useRef<number[]>([]);
+  const visualStepTimersRef = useRef<number[]>([]);
 
   const bpmRef = useRef(bpm);
   const masterVolumeRef = useRef(masterVolume);
@@ -150,9 +146,6 @@ export default function App() {
   useEffect(() => {
     mutedTracksRef.current = mutedTracks;
   }, [mutedTracks]);
-  useEffect(() => {
-    playingRef.current = playing;
-  }, [playing]);
 
   const ensureCtx = useCallback(async (resume = true) => {
     const Ctx =
@@ -207,12 +200,11 @@ export default function App() {
   const stopPlayback = useCallback(() => {
     transportRef.current?.stop();
     transportRef.current = null;
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = 0;
+    visualStepTimersRef.current.forEach((id) => window.clearTimeout(id));
+    visualStepTimersRef.current = [];
     setPlaying(false);
     setPlayhead(0);
     setBeatFlash({ gen: 0, col: 0 });
-    lastStepRef.current = -1;
   }, []);
 
   const resetSequence = useCallback(() => {
@@ -226,33 +218,6 @@ export default function App() {
     }, 0);
     return () => window.clearTimeout(t);
   }, [presetId, loadKit]);
-
-  useEffect(() => {
-    if (!playing) {
-      lastStepRef.current = -1;
-      return;
-    }
-    lastStepRef.current = -1;
-    const loop = () => {
-      const ctx = ctxRef.current;
-      if (!ctx || !playingRef.current) return;
-      const ph = playheadFromTime(
-        ctx,
-        transportStartRef.current,
-        bpmRef.current,
-      );
-      if (ph !== lastStepRef.current) {
-        lastStepRef.current = ph;
-        setBeatFlash((prev) => ({ gen: prev.gen + 1, col: ph }));
-      }
-      setPlayhead(ph);
-      rafRef.current = requestAnimationFrame(loop);
-    };
-    rafRef.current = requestAnimationFrame(loop);
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, [playing]);
 
   const togglePlay = useCallback(async () => {
     if (playing) {
@@ -276,9 +241,19 @@ export default function App() {
         () => patternRef.current,
         getPlaybackBuffers,
         masterGainRef.current ?? ctx.destination,
+        (step, scheduledTime) => {
+          const delayMs = Math.max(
+            0,
+            (scheduledTime - ctx.currentTime) * 1000,
+          );
+          const tid = window.setTimeout(() => {
+            setPlayhead(step);
+            setBeatFlash((prev) => ({ gen: prev.gen + 1, col: step }));
+          }, delayMs);
+          visualStepTimersRef.current.push(tid);
+        },
       );
       transportRef.current = transport;
-      transportStartRef.current = transport.getFirstBeatTime();
       setPlaying(true);
       setPlayhead(0);
     } catch (e) {
@@ -400,6 +375,8 @@ export default function App() {
     return () => {
       particleTimersRef.current.forEach((id) => window.clearTimeout(id));
       particleTimersRef.current = [];
+      visualStepTimersRef.current.forEach((id) => window.clearTimeout(id));
+      visualStepTimersRef.current = [];
     };
   }, []);
 

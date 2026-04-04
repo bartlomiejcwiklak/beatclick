@@ -34,6 +34,7 @@ export function startTransport(
   getPattern: () => boolean[][],
   getBuffers: () => (AudioBuffer | null)[],
   output: AudioNode = ctx.destination,
+  onStep?: (step: number, scheduledTime: number) => void,
 ): Transport {
   let nextNoteTime = ctx.currentTime + 0.08
   const firstBeatTime = nextNoteTime
@@ -48,6 +49,8 @@ export function startTransport(
     while (nextNoteTime < ctx.currentTime + SCHEDULE_AHEAD) {
       const step = stepIndex % 16
       const pattern = getPattern()
+
+      onStep?.(step, nextNoteTime)
 
       const g = ctx.createGain()
       g.gain.value = 0.88
