@@ -1,8 +1,10 @@
-# Beatclick
+<img width="600" height="auto" alt="logo" src="https://github.com/user-attachments/assets/487d4f94-dbda-40c9-acf7-e738a35bfa64" />
 
-Browser drum-grid sequencer with audio-file chopping into four random one-beat slices.
+### About
 
-## Run
+beatclick is a browser drum-grid sequencer
+
+### How to run
 
 1. Install dependencies:
 
@@ -16,13 +18,7 @@ npm install
 npm run dev
 ```
 
-## Controls
+### Controls
 
 - Space: play/stop
 - 1, 2, 3, 4: preview the four loaded sample slots
-
-## Import Workflow
-
-- Use the Audio file control in the app.
-- The app slices the file into four random one-beat samples at current BPM.
-- Samples map to rows and can be previewed with keys 1 to 4.
