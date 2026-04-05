@@ -6,17 +6,14 @@ is a browser drum-grid sequencer
 
 ### how to run
 
-1. install dependencies:
+you can use the pre-built demo deployment [here](https://bartlomiejcwiklak.github.io/beatclick/) to skip all the hassle
+
+but, if you'd rather not do that, then:
 
 ```bash
-npm install
+npm install && npm run dev
 ```
-
-2. start dev server:
-
-```bash
-npm run dev
-```
+will do the trick just as well.
 
 ### gallery
 
@@ -25,4 +22,4 @@ npm run dev
 
 ### acknowledgements
 
-this project uses the font [stack sans notch](https://fonts.google.com/specimen/Stack+Sans+Notch) by koto
+this awesome design uses the font [stack sans notch](https://fonts.google.com/specimen/Stack+Sans+Notch) by koto
