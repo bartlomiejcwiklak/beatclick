@@ -74,16 +74,18 @@ function previewSlotFromKey(e: KeyboardEvent): number | null {
 
 function HeaderLogo() {
   const [failed, setFailed] = useState(false);
+  const logoSrc = `${import.meta.env.BASE_URL}logo.png`;
+
   if (failed) {
     return (
       <h1 className="text-3xl font-bold tracking-tight text-yellow-400 sm:text-4xl">
-        Pulse Grid
+        beatclick
       </h1>
     );
   }
   return (
     <img
-      src="/logo.png"
+      src={logoSrc}
       alt=""
       decoding="async"
       onError={() => setFailed(true)}

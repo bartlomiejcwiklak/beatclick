@@ -12,7 +12,10 @@ export async function loadBuffers(
   presetId: string,
   tracks: TrackDef[],
 ): Promise<AudioBuffer[]> {
-  const urls = tracks.map((t) => `/samples/${presetId}/${t.file}`)
+  const base = import.meta.env.BASE_URL.endsWith('/')
+    ? import.meta.env.BASE_URL
+    : `${import.meta.env.BASE_URL}/`
+  const urls = tracks.map((t) => `${base}samples/${presetId}/${t.file}`)
   return Promise.all(
     urls.map(async (url) => {
       const res = await fetch(url)
